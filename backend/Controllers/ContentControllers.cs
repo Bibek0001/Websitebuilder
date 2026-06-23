@@ -210,9 +210,15 @@ public class BlogController : ControllerBase
         return Ok(await query.OrderByDescending(b => b.CreatedAt).ToListAsync());
     }
 
+    // Public — only return published posts by ID
     [HttpGet("post/{id}")]
-    public async Task<IActionResult> GetOne(int id) =>
-        Ok(await _db.BlogPosts.FindAsync(id));
+    public async Task<IActionResult> GetOne(int id)
+    {
+        var post = await _db.BlogPosts.FindAsync(id);
+        if (post == null) return NotFound();
+        if (!post.Published) return NotFound(); // don't expose drafts publicly
+        return Ok(post);
+    }
 
     [Authorize]
     [HttpPost]
@@ -274,14 +280,26 @@ public class GalleryController : ControllerBase
         return Ok(await _db.GalleryItems.Where(g => g.UserId == uid).OrderByDescending(g => g.CreatedAt).ToListAsync());
     }
 
+    private static readonly HashSet<string> AllowedImageExts =
+        new(StringComparer.OrdinalIgnoreCase) { ".jpg", ".jpeg", ".png", ".webp", ".gif" };
+    private const long MaxImageSize = 5 * 1024 * 1024; // 5 MB
+
     [Authorize]
     [HttpPost]
     public async Task<IActionResult> Upload([FromForm] IFormFile file, [FromForm] string? caption, [FromForm] string? category)
     {
+        if (file == null || file.Length == 0)
+            return BadRequest(new { message = "No file provided." });
+        if (file.Length > MaxImageSize)
+            return BadRequest(new { message = "Image must be under 5 MB." });
+        var ext = Path.GetExtension(file.FileName);
+        if (!AllowedImageExts.Contains(ext))
+            return BadRequest(new { message = "Only JPG, PNG, WEBP, GIF images are allowed." });
+
         var uid = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
         var uploads = Path.Combine(_env.WebRootPath ?? "wwwroot", "uploads", "gallery");
         Directory.CreateDirectory(uploads);
-        var fileName = $"{Guid.NewGuid()}{Path.GetExtension(file.FileName)}";
+        var fileName = $"{Guid.NewGuid()}{ext.ToLowerInvariant()}";
         using (var stream = new FileStream(Path.Combine(uploads, fileName), FileMode.Create))
             await file.CopyToAsync(stream);
 
@@ -305,6 +323,15 @@ public class GalleryController : ControllerBase
         var uid = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
         var item = await _db.GalleryItems.FirstOrDefaultAsync(g => g.Id == id && g.UserId == uid);
         if (item == null) return NotFound();
+
+        // Delete physical file
+        try
+        {
+            var fullPath = Path.Combine(_env.WebRootPath ?? "wwwroot", item.ImageUrl.TrimStart('/'));
+            if (System.IO.File.Exists(fullPath)) System.IO.File.Delete(fullPath);
+        }
+        catch { /* best-effort cleanup */ }
+
         _db.GalleryItems.Remove(item);
         await _db.SaveChangesAsync();
         return NoContent();

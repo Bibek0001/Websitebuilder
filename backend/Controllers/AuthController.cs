@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using PersonalWebsiteAPI.Data;
 using PersonalWebsiteAPI.Models;
@@ -22,8 +23,15 @@ public class AuthController : ControllerBase
     }
 
     [HttpPost("register")]
+    [EnableRateLimiting("auth")]
     public async Task<IActionResult> Register([FromBody] RegisterDto dto)
     {
+        if (string.IsNullOrWhiteSpace(dto.Username) || dto.Username.Length < 3)
+            return BadRequest(new { message = "Username must be at least 3 characters." });
+        if (string.IsNullOrWhiteSpace(dto.Password) || dto.Password.Length < 8)
+            return BadRequest(new { message = "Password must be at least 8 characters." });
+        if (string.IsNullOrWhiteSpace(dto.Email) || !dto.Email.Contains('@'))
+            return BadRequest(new { message = "A valid email is required." });
         if (await _db.Users.AnyAsync(u => u.Email == dto.Email))
             return BadRequest(new { message = "Email already exists" });
 
@@ -48,11 +56,25 @@ public class AuthController : ControllerBase
             FullName = dto.Username,
             Tagline = "Software Developer | Technology Enthusiast",
             Bio = "Welcome to my personal website.",
-            Slug = slug
+            Slug = slug,
+            WhereImFrom = "Based in Nepal, working with clients globally across technology and governance sectors.",
+            CurrentlyDoing = "Building software solutions, consulting for IT projects, and advocating for digital transformation.",
+            MyGoals = "Empowering communities through technology, building sustainable digital ecosystems.",
+            MyPassion = "Solving real-world problems with elegant code, bridging the gap between technology and services.",
+            StatOneValue = "10+",
+            StatOneLabel = "Years Experience",
+            StatTwoValue = "50+",
+            StatTwoLabel = "Projects Completed",
+            StatThreeValue = "100+",
+            StatThreeLabel = "Happy Clients",
+            StatFourValue = "15+",
+            StatFourLabel = "Certifications"
         });
         await _db.SaveChangesAsync();
 
-        var token = _jwt.GenerateToken(user);
+        var expirySetting2 = await _db.PlatformSettings.FirstOrDefaultAsync(s => s.Key == "security.jwtExpiryDays");
+        var expiryDays2 = int.TryParse(expirySetting2?.Value, out var d2) ? d2 : 7;
+        var token = _jwt.GenerateToken(user, expiryDays2);
         return Ok(new
         {
             user = new { id = user.Id, username = user.Username, email = user.Email, role = user.Role },
@@ -61,6 +83,7 @@ public class AuthController : ControllerBase
     }
 
     [HttpPost("login")]
+    [EnableRateLimiting("auth")]
     public async Task<IActionResult> Login([FromBody] LoginDto dto)
     {
         var user = await _db.Users.FirstOrDefaultAsync(u => u.Email == dto.Email);
@@ -70,7 +93,11 @@ public class AuthController : ControllerBase
         if (!user.IsActive)
             return Unauthorized(new { message = "Account is disabled" });
 
-        var token = _jwt.GenerateToken(user);
+        // Read JWT expiry from platform settings (default 7 days)
+        var expirySetting = await _db.PlatformSettings.FirstOrDefaultAsync(s => s.Key == "security.jwtExpiryDays");
+        var expiryDays = int.TryParse(expirySetting?.Value, out var d) ? d : 7;
+
+        var token = _jwt.GenerateToken(user, expiryDays);
         return Ok(new
         {
             user = new { id = user.Id, username = user.Username, email = user.Email, role = user.Role },
@@ -89,11 +116,26 @@ public class AuthController : ControllerBase
     }
 
     [HttpPost("forgot-password")]
+    [EnableRateLimiting("auth")]
     public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordDto dto)
     {
         var user = await _db.Users.FirstOrDefaultAsync(u => u.Email == dto.Email);
         // Always return OK to avoid email enumeration
         if (user == null) return Ok(new { message = "If that email exists, a reset link has been sent." });
+
+        // Validate BaseUrl to prevent open redirect — only allow same-origin or configured frontend URL
+        var allowedOrigins = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "http://localhost:3000",
+            "http://localhost:3001",
+            Environment.GetEnvironmentVariable("FRONTEND_URL") ?? "",
+        };
+        Uri? baseUri = null;
+        if (!Uri.TryCreate(dto.BaseUrl, UriKind.Absolute, out baseUri) ||
+            !allowedOrigins.Any(o => !string.IsNullOrEmpty(o) && dto.BaseUrl.StartsWith(o, StringComparison.OrdinalIgnoreCase)))
+        {
+            return BadRequest(new { message = "Invalid base URL." });
+        }
 
         // Generate secure token
         var token = Convert.ToBase64String(System.Security.Cryptography.RandomNumberGenerator.GetBytes(32))
@@ -171,8 +213,8 @@ public class AuthController : ControllerBase
         if (!BCrypt.Net.BCrypt.Verify(dto.CurrentPassword, user.PasswordHash))
             return BadRequest(new { message = "Current password is incorrect." });
 
-        if (dto.NewPassword.Length < 6)
-            return BadRequest(new { message = "New password must be at least 6 characters." });
+        if (dto.NewPassword.Length < 8)
+            return BadRequest(new { message = "New password must be at least 8 characters." });
 
         user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(dto.NewPassword);
         await _db.SaveChangesAsync();
