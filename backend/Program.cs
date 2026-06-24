@@ -29,7 +29,7 @@ if (!string.IsNullOrWhiteSpace(pgConn))
         var username = userInfo[0];
         var password = userInfo.Length > 1 ? Uri.UnescapeDataString(userInfo[1]) : "";
 
-        pgConn = $"Host={host};Port={port};Database={database};Username={username};Password={password};SSL Mode=Require;Trust Server Certificate=true;Timeout=30;Command Timeout=60;";
+        pgConn = $"Host={host};Port={port};Database={database};Username={username};Password={password};SSL Mode=Require;Trust Server Certificate=true;Pooling=true;Minimum Pool Size=1;Maximum Pool Size=20;Connection Idle Lifetime=300;Timeout=60;Command Timeout=60;";
     }
 
     builder.Services.AddDbContext<AppDbContext>(options =>
