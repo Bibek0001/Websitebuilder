@@ -5,7 +5,8 @@ namespace PersonalWebsiteAPI.Services;
 
 public class CloudinaryService
 {
-    private readonly Cloudinary _cloudinary;
+    private Cloudinary? _cloudinary;
+    private readonly IConfiguration _config;
 
     private static readonly HashSet<string> AllowedImageExts =
         new(StringComparer.OrdinalIgnoreCase) { ".jpg", ".jpeg", ".png", ".webp", ".gif" };
@@ -18,9 +19,16 @@ public class CloudinaryService
 
     public CloudinaryService(IConfiguration config)
     {
-        var cloud  = config["Cloudinary:CloudName"]  ?? Environment.GetEnvironmentVariable("CLOUDINARY_CLOUD")  ?? "";
-        var key    = config["Cloudinary:ApiKey"]     ?? Environment.GetEnvironmentVariable("CLOUDINARY_KEY")    ?? "";
-        var secret = config["Cloudinary:ApiSecret"]  ?? Environment.GetEnvironmentVariable("CLOUDINARY_SECRET") ?? "";
+        _config = config;
+    }
+
+    private Cloudinary GetClient()
+    {
+        if (_cloudinary != null) return _cloudinary;
+
+        var cloud  = _config["Cloudinary:CloudName"]  ?? Environment.GetEnvironmentVariable("CLOUDINARY_CLOUD")  ?? "";
+        var key    = _config["Cloudinary:ApiKey"]     ?? Environment.GetEnvironmentVariable("CLOUDINARY_KEY")    ?? "";
+        var secret = _config["Cloudinary:ApiSecret"]  ?? Environment.GetEnvironmentVariable("CLOUDINARY_SECRET") ?? "";
 
         if (string.IsNullOrWhiteSpace(cloud) || string.IsNullOrWhiteSpace(key) || string.IsNullOrWhiteSpace(secret))
             throw new InvalidOperationException(
@@ -28,6 +36,7 @@ public class CloudinaryService
 
         var account = new Account(cloud, key, secret);
         _cloudinary = new Cloudinary(account) { Api = { Secure = true } };
+        return _cloudinary;
     }
 
     /// <summary>Upload a profile photo or gallery image. Returns the secure HTTPS URL.</summary>
@@ -47,7 +56,7 @@ public class CloudinaryService
                 : new Transformation().Quality("auto").FetchFormat("auto"),
         };
 
-        var result = await _cloudinary.UploadAsync(uploadParams);
+        var result = await GetClient().UploadAsync(uploadParams);
         if (result.Error != null)
             throw new InvalidOperationException($"Cloudinary upload failed: {result.Error.Message}");
 
@@ -67,7 +76,7 @@ public class CloudinaryService
             PublicId = Guid.NewGuid().ToString(),
         };
 
-        var result = await _cloudinary.UploadAsync(uploadParams);
+        var result = await GetClient().UploadAsync(uploadParams);
         if (result.Error != null)
             throw new InvalidOperationException($"Cloudinary upload failed: {result.Error.Message}");
 
@@ -80,31 +89,24 @@ public class CloudinaryService
         if (string.IsNullOrWhiteSpace(url) || !url.Contains("cloudinary.com")) return;
         try
         {
-            // Extract public_id from URL
-            // URL format: https://res.cloudinary.com/{cloud}/image/upload/v{ver}/{folder}/{id}.{ext}
             var uri    = new Uri(url);
             var parts  = uri.AbsolutePath.Split('/');
-            // Find "upload" index and take everything after it (minus version segment)
             var uploadIdx = Array.IndexOf(parts, "upload");
             if (uploadIdx < 0) return;
 
-            // parts after "upload": v1234567, folder, public_id.ext
             var afterUpload = parts.Skip(uploadIdx + 1).ToArray();
-            // Skip version segment (starts with 'v' followed by digits)
             if (afterUpload.Length > 0 && System.Text.RegularExpressions.Regex.IsMatch(afterUpload[0], @"^v\d+$"))
                 afterUpload = afterUpload.Skip(1).ToArray();
 
             var publicIdWithExt = string.Join("/", afterUpload);
-            // Remove extension for images
             var publicId = System.IO.Path.ChangeExtension(publicIdWithExt, null)?.TrimEnd('.');
 
             if (string.IsNullOrWhiteSpace(publicId)) return;
 
-            // Determine resource type
             var resourceType = url.Contains("/raw/") ? ResourceType.Raw : ResourceType.Image;
-            await _cloudinary.DestroyAsync(new DeletionParams(publicId) { ResourceType = resourceType });
+            await GetClient().DestroyAsync(new DeletionParams(publicId) { ResourceType = resourceType });
         }
-        catch { /* best-effort — never fail a delete */ }
+        catch { /* best-effort */ }
     }
 
     private static void ValidateFile(IFormFile file, HashSet<string> allowedExts, long maxBytes, string label)
