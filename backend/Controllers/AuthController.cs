@@ -72,8 +72,14 @@ public class AuthController : ControllerBase
         });
         await _db.SaveChangesAsync();
 
-        var expirySetting2 = await _db.PlatformSettings.FirstOrDefaultAsync(s => s.Key == "security.jwtExpiryDays");
-        var expiryDays2 = int.TryParse(expirySetting2?.Value, out var d2) ? d2 : 7;
+        int expiryDays2 = 7;
+        try
+        {
+            var expirySetting2 = await _db.PlatformSettings.FirstOrDefaultAsync(s => s.Key == "security.jwtExpiryDays");
+            if (int.TryParse(expirySetting2?.Value, out var d2)) expiryDays2 = d2;
+        }
+        catch { /* use default */ }
+
         var token = _jwt.GenerateToken(user, expiryDays2);
         return Ok(new
         {
@@ -98,8 +104,14 @@ public class AuthController : ControllerBase
             return Unauthorized(new { message = "Account is disabled" });
 
         // Read JWT expiry from platform settings (default 7 days)
-        var expirySetting = await _db.PlatformSettings.FirstOrDefaultAsync(s => s.Key == "security.jwtExpiryDays");
-        var expiryDays = int.TryParse(expirySetting?.Value, out var d) ? d : 7;
+        // Wrap in try-catch in case PlatformSettings table isn't seeded yet
+        int expiryDays = 7;
+        try
+        {
+            var expirySetting = await _db.PlatformSettings.FirstOrDefaultAsync(s => s.Key == "security.jwtExpiryDays");
+            if (int.TryParse(expirySetting?.Value, out var d)) expiryDays = d;
+        }
+        catch { /* use default 7 days if table not available */ }
 
         var token = _jwt.GenerateToken(user, expiryDays);
         return Ok(new
