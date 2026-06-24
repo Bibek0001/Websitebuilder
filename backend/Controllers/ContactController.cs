@@ -1,6 +1,7 @@
 using MailKit.Net.Smtp;
 using MailKit.Security;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using MimeKit;
 using PersonalWebsiteAPI.Data;
@@ -16,12 +17,18 @@ public class ContactController : ControllerBase
     public ContactController(AppDbContext db) => _db = db;
 
     [HttpPost]
+    [EnableRateLimiting("auth")]
     public async Task<IActionResult> SendMessage([FromBody] ContactDto dto)
     {
         if (string.IsNullOrWhiteSpace(dto.Name) ||
             string.IsNullOrWhiteSpace(dto.Email) ||
             string.IsNullOrWhiteSpace(dto.Message))
             return BadRequest(new { message = "All fields are required." });
+
+        // Sanitize inputs to prevent email header injection
+        var safeName    = SanitizeHeaderValue(dto.Name);
+        var safeEmail   = SanitizeHeaderValue(dto.Email);
+        var safeMessage = dto.Message.Length > 5000 ? dto.Message[..5000] : dto.Message;
 
         // Find the recipient's profile email
         string? recipientEmail = null;
@@ -46,7 +53,6 @@ public class ContactController : ControllerBase
         // Log the contact attempt regardless of SMTP config
         Console.WriteLine($"[Contact] From: {dto.Name} <{dto.Email}> To: {recipientEmail ?? contactEmail} — {dto.Message[..Math.Min(60, dto.Message.Length)]}");
 
-        // Only try to send email if SMTP is configured
         if (!string.IsNullOrWhiteSpace(smtpHost) && !string.IsNullOrWhiteSpace(smtpUser))
         {
             try
@@ -57,8 +63,8 @@ public class ContactController : ControllerBase
                 var message = new MimeMessage();
                 message.From.Add(new MailboxAddress(fromName, smtpUser));
                 message.To.Add(new MailboxAddress(to, to));
-                message.ReplyTo.Add(new MailboxAddress(dto.Name, dto.Email));
-                message.Subject = $"New message from {dto.Name} via PersonalSite.io";
+                message.ReplyTo.Add(new MailboxAddress(safeName, safeEmail));
+                message.Subject = $"New message from {safeName} via PersonalSite.io";
 
                 message.Body = new TextPart("html")
                 {
@@ -69,11 +75,11 @@ public class ContactController : ControllerBase
   </div>
   <div style='background: #f9fafb; padding: 24px; border-radius: 0 0 12px 12px; border: 1px solid #e5e7eb;'>
     <table style='width: 100%; border-collapse: collapse;'>
-      <tr><td style='padding: 8px 0; color: #6b7280; font-size: 13px;'>From</td><td style='padding: 8px 0; font-weight: 600;'>{dto.Name}</td></tr>
-      <tr><td style='padding: 8px 0; color: #6b7280; font-size: 13px;'>Email</td><td style='padding: 8px 0;'><a href='mailto:{dto.Email}'>{dto.Email}</a></td></tr>
+      <tr><td style='padding: 8px 0; color: #6b7280; font-size: 13px;'>From</td><td style='padding: 8px 0; font-weight: 600;'>{System.Web.HttpUtility.HtmlEncode(safeName)}</td></tr>
+      <tr><td style='padding: 8px 0; color: #6b7280; font-size: 13px;'>Email</td><td style='padding: 8px 0;'>{System.Web.HttpUtility.HtmlEncode(safeEmail)}</td></tr>
     </table>
     <hr style='border: none; border-top: 1px solid #e5e7eb; margin: 16px 0;'/>
-    <p style='color: #374151; line-height: 1.6;'>{System.Web.HttpUtility.HtmlEncode(dto.Message).Replace("\n", "<br/>")}</p>
+    <p style='color: #374151; line-height: 1.6;'>{System.Web.HttpUtility.HtmlEncode(safeMessage).Replace("\n", "<br/>")}</p>
     <hr style='border: none; border-top: 1px solid #e5e7eb; margin: 16px 0;'/>
     <p style='color: #9ca3af; font-size: 12px;'>Sent via PersonalSite.io contact form</p>
   </div>
@@ -89,12 +95,15 @@ public class ContactController : ControllerBase
             catch (Exception ex)
             {
                 Console.WriteLine($"[Contact] SMTP error: {ex.Message}");
-                // Still return success — the message was received even if email failed
             }
         }
 
         return Ok(new { success = true, message = "Message received. We will get back to you within 24 hours." });
     }
+
+    // Strip newlines and CR to prevent email header injection
+    private static string SanitizeHeaderValue(string input) =>
+        input.Replace("\r", "").Replace("\n", "").Trim()[..Math.Min(input.Length, 200)];
 }
 
 public record ContactDto(string Name, string Email, string Message, string? RecipientSlug);

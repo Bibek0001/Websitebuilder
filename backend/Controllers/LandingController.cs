@@ -182,25 +182,46 @@ public class AdminController : ControllerBase
     public async Task<IActionResult> DeleteUser(int id)
     { var user = await _db.Users.FindAsync(id); if (user == null || user.Role == "superadmin") return NotFound(); _db.Users.Remove(user); await _db.SaveChangesAsync(); return NoContent(); }
 
-    // ── Settings ──
+    // ── Settings — redact sensitive values on GET ──
+    private static readonly HashSet<string> RedactedKeys =
+        new(StringComparer.OrdinalIgnoreCase) { "smtp.password" };
+
     [HttpGet("settings")]
-    public async Task<IActionResult> GetSettings() =>
-        Ok(await _db.PlatformSettings.OrderBy(s => s.Group).ThenBy(s => s.Key).ToListAsync());
+    public async Task<IActionResult> GetSettings()
+    {
+        var settings = await _db.PlatformSettings.OrderBy(s => s.Group).ThenBy(s => s.Key).ToListAsync();
+        // Return redacted copy — never send passwords over the wire
+        var result = settings.Select(s => new
+        {
+            s.Id, s.Key, s.Group, s.Description, s.UpdatedAt,
+            Value = RedactedKeys.Contains(s.Key) ? (string.IsNullOrEmpty(s.Value) ? "" : "••••••••") : s.Value
+        });
+        return Ok(result);
+    }
 
     [HttpPut("settings/{key}")]
     public async Task<IActionResult> UpsertSetting(string key, [FromBody] SettingDto dto)
     {
         var item = await _db.PlatformSettings.FirstOrDefaultAsync(s => s.Key == key);
         if (item == null) { item = new PlatformSettings { Key = key, Group = dto.Group, Description = dto.Description ?? "" }; _db.PlatformSettings.Add(item); }
-        item.Value = dto.Value; item.Group = dto.Group; if (dto.Description != null) item.Description = dto.Description; item.UpdatedAt = DateTime.UtcNow;
-        await _db.SaveChangesAsync(); return Ok(item);
+        // Don't overwrite a real password with the redaction placeholder
+        if (!RedactedKeys.Contains(key) || dto.Value != "••••••••")
+            item.Value = dto.Value;
+        item.Group = dto.Group; if (dto.Description != null) item.Description = dto.Description; item.UpdatedAt = DateTime.UtcNow;
+        await _db.SaveChangesAsync(); return Ok(new { item.Id, item.Key, item.Group, item.Description, item.UpdatedAt });
     }
 
     [HttpPut("settings")]
     public async Task<IActionResult> SaveAllSettings([FromBody] List<SettingUpdateDto> updates)
     {
         foreach (var upd in updates)
-        { var item = await _db.PlatformSettings.FirstOrDefaultAsync(s => s.Key == upd.Key); if (item != null) { item.Value = upd.Value; item.UpdatedAt = DateTime.UtcNow; } }
+        {
+            var item = await _db.PlatformSettings.FirstOrDefaultAsync(s => s.Key == upd.Key);
+            if (item == null) continue;
+            // Don't overwrite real password with redaction placeholder
+            if (RedactedKeys.Contains(upd.Key) && upd.Value == "••••••••") continue;
+            item.Value = upd.Value; item.UpdatedAt = DateTime.UtcNow;
+        }
         await _db.SaveChangesAsync(); return Ok(new { saved = updates.Count });
     }
 

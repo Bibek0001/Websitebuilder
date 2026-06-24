@@ -1,4 +1,5 @@
 using System.Text;
+using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -8,25 +9,41 @@ using PersonalWebsiteAPI.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// ─── Database — SQL Server locally, PostgreSQL on Railway/cloud ───────────────
-var pgConn = builder.Configuration.GetConnectionString("PostgresConnection")
-          ?? Environment.GetEnvironmentVariable("DATABASE_URL");
+// ─── Database — PostgreSQL in production (DATABASE_URL env var), SQL Server locally ───
+var pgConn = Environment.GetEnvironmentVariable("DATABASE_URL")
+          ?? builder.Configuration.GetConnectionString("PostgresConnection");
+
+var sqlConn = builder.Configuration.GetConnectionString("DefaultConnection");
 
 if (!string.IsNullOrWhiteSpace(pgConn))
 {
-    // Production: PostgreSQL (Railway sets DATABASE_URL automatically)
     builder.Services.AddDbContext<AppDbContext>(options =>
         options.UseNpgsql(pgConn));
+    Console.WriteLine("[INFO] Using PostgreSQL database.");
+}
+else if (!string.IsNullOrWhiteSpace(sqlConn))
+{
+    builder.Services.AddDbContext<AppDbContext>(options =>
+        options.UseSqlServer(sqlConn));
+    Console.WriteLine("[INFO] Using SQL Server database (local dev).");
 }
 else
 {
-    // Local development: SQL Server Express
-    builder.Services.AddDbContext<AppDbContext>(options =>
-        options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
+    throw new InvalidOperationException(
+        "No database connection configured. Set DATABASE_URL (PostgreSQL) or " +
+        "ConnectionStrings:DefaultConnection (SQL Server) before starting.");
 }
 
 // ─── JWT Auth ─────────────────────────────────────────────────────────────────
-var jwtKey = builder.Configuration["Jwt:Key"]!;
+// Key priority: JWT_KEY env var → appsettings (dev only, never commit real key)
+var jwtKey = Environment.GetEnvironmentVariable("JWT_KEY")
+          ?? builder.Configuration["Jwt:Key"];
+
+if (string.IsNullOrWhiteSpace(jwtKey) || jwtKey.Length < 32)
+    throw new InvalidOperationException(
+        "JWT_KEY environment variable is missing or too short (min 32 chars). " +
+        "Set it before starting the application.");
+
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
@@ -46,22 +63,51 @@ builder.Services.AddAuthorization();
 builder.Services.AddScoped<JwtService>();
 builder.Services.AddControllers();
 
+// ─── Rate Limiting ────────────────────────────────────────────────────────────
+builder.Services.AddRateLimiter(options =>
+{
+    // Strict limit for auth endpoints: 10 requests per minute per IP
+    options.AddPolicy("auth", context =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 10,
+                Window = TimeSpan.FromMinutes(1),
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                QueueLimit = 0
+            }));
+
+    options.RejectionStatusCode = 429;
+});
+
 // ─── CORS ─────────────────────────────────────────────────────────────────────
+var frontendUrl = Environment.GetEnvironmentVariable("FRONTEND_URL") ?? "";
+var allowedOrigins = new List<string>
+{
+    "http://localhost:3000",
+    "http://localhost:3001",
+};
+if (!string.IsNullOrWhiteSpace(frontendUrl))
+    allowedOrigins.Add(frontendUrl);
+
 builder.Services.AddCors(options =>
     options.AddPolicy("AllowFrontend", policy =>
-        policy.WithOrigins(
-            "http://localhost:3000",
-            "http://localhost:3001",
-            // Add your Vercel URL here after deployment:
-            "https://your-app.vercel.app",
-            Environment.GetEnvironmentVariable("FRONTEND_URL") ?? ""
-        )
-        .AllowAnyHeader()
-        .AllowAnyMethod()));
+        policy.WithOrigins(allowedOrigins.ToArray())
+              .AllowAnyHeader()
+              .AllowAnyMethod()));
 
 var app = builder.Build();
 
+// ─── HTTPS enforcement in production ─────────────────────────────────────────
+if (!app.Environment.IsDevelopment())
+{
+    app.UseHsts();
+    app.UseHttpsRedirection();
+}
+
 app.UseCors("AllowFrontend");
+app.UseRateLimiter();
 app.UseStaticFiles();
 app.UseAuthentication();
 app.UseAuthorization();
@@ -80,18 +126,30 @@ app.Run();
 // ─── Seed default data ────────────────────────────────────────────────────────
 static async Task SeedData(AppDbContext db)
 {
-    // Seed SuperAdmin
+    // Seed SuperAdmin — credentials come from environment variables only, never hardcoded
     if (!db.Users.Any(u => u.Role == "superadmin"))
     {
-        var admin = new User
+        var adminEmail    = Environment.GetEnvironmentVariable("ADMIN_EMAIL")    ?? "admin@personalsite.com";
+        var adminPassword = Environment.GetEnvironmentVariable("ADMIN_PASSWORD") ?? null;
+        var adminUsername = Environment.GetEnvironmentVariable("ADMIN_USERNAME") ?? "superadmin";
+
+        if (string.IsNullOrWhiteSpace(adminPassword))
         {
-            Username = "superadmin",
-            Email = "admin@personalsite.com",
-            PasswordHash = BCrypt.Net.BCrypt.HashPassword("Admin@123"),
-            Role = "superadmin"
-        };
-        db.Users.Add(admin);
-        await db.SaveChangesAsync();
+            Console.WriteLine("[WARN] ADMIN_PASSWORD env var not set. Superadmin account NOT created. Set ADMIN_PASSWORD to seed the admin.");
+        }
+        else
+        {
+            var admin = new User
+            {
+                Username     = adminUsername,
+                Email        = adminEmail,
+                PasswordHash = BCrypt.Net.BCrypt.HashPassword(adminPassword),
+                Role         = "superadmin"
+            };
+            db.Users.Add(admin);
+            await db.SaveChangesAsync();
+            Console.WriteLine($"[INFO] Superadmin '{adminUsername}' created.");
+        }
     }
 
     // Seed landing content

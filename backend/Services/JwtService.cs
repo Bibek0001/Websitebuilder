@@ -12,7 +12,7 @@ public class JwtService
 
     public JwtService(IConfiguration config) => _config = config;
 
-    public string GenerateToken(User user)
+    public string GenerateToken(User user, int expiryDays = 7)
     {
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_config["Jwt:Key"]!));
         var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
@@ -29,7 +29,7 @@ public class JwtService
             issuer: _config["Jwt:Issuer"],
             audience: _config["Jwt:Audience"],
             claims: claims,
-            expires: DateTime.UtcNow.AddDays(30),
+            expires: DateTime.UtcNow.AddDays(expiryDays),
             signingCredentials: creds
         );
 
