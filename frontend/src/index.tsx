@@ -13,7 +13,12 @@ root.render(
   </React.StrictMode>
 );
 
-// If you want to start measuring performance in your app, pass a function
-// to log results (for example: reportWebVitals(console.log))
-// or send to an analytics endpoint. Learn more: https://bit.ly/CRA-vitals
+// Keep Render backend awake — ping every 14 minutes to prevent 15min sleep
+const API = process.env.REACT_APP_API_URL || '';
+if (API && process.env.NODE_ENV === 'production') {
+  setInterval(() => {
+    fetch(`${API}/health`).catch(() => {});
+  }, 14 * 60 * 1000); // every 14 minutes
+}
+
 reportWebVitals();
