@@ -22,9 +22,14 @@ if (!string.IsNullOrWhiteSpace(pgConn))
     if (pgConn.StartsWith("postgres://") || pgConn.StartsWith("postgresql://"))
     {
         var uri = new Uri(pgConn);
-        var userInfo = uri.UserInfo.Split(':');
-        var npgsqlConn = $"Host={uri.Host};Port={uri.Port};Database={uri.AbsolutePath.TrimStart('/')};Username={userInfo[0]};Password={Uri.UnescapeDataString(userInfo[1])};SSL Mode=Require;Trust Server Certificate=true;Prefer IPv4=true;Timeout=30;Command Timeout=30;";
-        pgConn = npgsqlConn;
+        var userInfo = uri.UserInfo.Split(':', 2);
+        var host = uri.Host;
+        var port = uri.Port > 0 ? uri.Port : 5432;
+        var database = uri.AbsolutePath.TrimStart('/');
+        var username = userInfo[0];
+        var password = userInfo.Length > 1 ? Uri.UnescapeDataString(userInfo[1]) : "";
+
+        pgConn = $"Host={host};Port={port};Database={database};Username={username};Password={password};SSL Mode=Require;Trust Server Certificate=true;Timeout=30;Command Timeout=60;";
     }
 
     builder.Services.AddDbContext<AppDbContext>(options =>
