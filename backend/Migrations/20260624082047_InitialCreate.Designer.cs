@@ -12,8 +12,8 @@ using PersonalWebsiteAPI.Data;
 namespace PersonalWebsiteAPI.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20260624081709_InitialPostgres")]
-    partial class InitialPostgres
+    [Migration("20260624082047_InitialCreate")]
+    partial class InitialCreate
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
