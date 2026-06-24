@@ -17,6 +17,16 @@ var sqlConn = builder.Configuration.GetConnectionString("DefaultConnection");
 
 if (!string.IsNullOrWhiteSpace(pgConn))
 {
+    // Convert postgres:// or postgresql:// URI to Npgsql connection string format
+    // Supabase provides: postgresql://user:password@host:port/dbname
+    if (pgConn.StartsWith("postgres://") || pgConn.StartsWith("postgresql://"))
+    {
+        var uri = new Uri(pgConn);
+        var userInfo = uri.UserInfo.Split(':');
+        var npgsqlConn = $"Host={uri.Host};Port={uri.Port};Database={uri.AbsolutePath.TrimStart('/')};Username={userInfo[0]};Password={Uri.UnescapeDataString(userInfo[1])};SSL Mode=Require;Trust Server Certificate=true;";
+        pgConn = npgsqlConn;
+    }
+
     builder.Services.AddDbContext<AppDbContext>(options =>
         options.UseNpgsql(pgConn));
     Console.WriteLine("[INFO] Using PostgreSQL database.");
