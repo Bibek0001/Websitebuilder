@@ -87,6 +87,10 @@ public class AuthController : ControllerBase
     public async Task<IActionResult> Login([FromBody] LoginDto dto)
     {
         var user = await _db.Users.FirstOrDefaultAsync(u => u.Email == dto.Email);
+
+        // If no user found, try by username too (for admin convenience)
+        user ??= await _db.Users.FirstOrDefaultAsync(u => u.Username == dto.Email);
+
         if (user == null || !BCrypt.Net.BCrypt.Verify(dto.Password, user.PasswordHash))
             return Unauthorized(new { message = "Invalid credentials" });
 

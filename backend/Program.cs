@@ -168,29 +168,42 @@ app.Run();
 static async Task SeedData(AppDbContext db)
 {
     // Seed SuperAdmin — credentials come from environment variables only, never hardcoded
-    if (!db.Users.Any(u => u.Role == "superadmin"))
-    {
-        var adminEmail    = Environment.GetEnvironmentVariable("ADMIN_EMAIL")    ?? "admin@personalsite.com";
-        var adminPassword = Environment.GetEnvironmentVariable("ADMIN_PASSWORD") ?? null;
-        var adminUsername = Environment.GetEnvironmentVariable("ADMIN_USERNAME") ?? "superadmin";
+    var adminEmail    = Environment.GetEnvironmentVariable("ADMIN_EMAIL")    ?? "admin@personalsite.com";
+    var adminPassword = Environment.GetEnvironmentVariable("ADMIN_PASSWORD") ?? null;
+    var adminUsername = Environment.GetEnvironmentVariable("ADMIN_USERNAME") ?? "superadmin";
 
-        if (string.IsNullOrWhiteSpace(adminPassword))
+    if (!string.IsNullOrWhiteSpace(adminPassword))
+    {
+        var existingAdmin = db.Users.FirstOrDefault(u => u.Role == "superadmin");
+        if (existingAdmin == null)
         {
-            Console.WriteLine("[WARN] ADMIN_PASSWORD env var not set. Superadmin account NOT created. Set ADMIN_PASSWORD to seed the admin.");
-        }
-        else
-        {
+            // Create new superadmin
             var admin = new User
             {
                 Username     = adminUsername,
                 Email        = adminEmail,
                 PasswordHash = BCrypt.Net.BCrypt.HashPassword(adminPassword),
-                Role         = "superadmin"
+                Role         = "superadmin",
+                IsActive     = true
             };
             db.Users.Add(admin);
             await db.SaveChangesAsync();
             Console.WriteLine($"[INFO] Superadmin '{adminUsername}' created.");
         }
+        else
+        {
+            // Always sync password and credentials on deploy
+            existingAdmin.PasswordHash = BCrypt.Net.BCrypt.HashPassword(adminPassword);
+            existingAdmin.Email        = adminEmail;
+            existingAdmin.Username     = adminUsername;
+            existingAdmin.IsActive     = true;
+            await db.SaveChangesAsync();
+            Console.WriteLine($"[INFO] Superadmin '{adminUsername}' credentials updated.");
+        }
+    }
+    else
+    {
+        Console.WriteLine("[WARN] ADMIN_PASSWORD env var not set. Superadmin account NOT created/updated.");
     }
 
     // Seed landing content
