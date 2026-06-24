@@ -133,8 +133,33 @@ app.MapControllers();
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-    db.Database.Migrate();
-    await SeedData(db);
+    var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+
+    var maxRetries = 5;
+    for (int attempt = 1; attempt <= maxRetries; attempt++)
+    {
+        try
+        {
+            logger.LogInformation("Migration attempt {Attempt}/{Max}...", attempt, maxRetries);
+            db.Database.Migrate();
+            logger.LogInformation("Migrations applied successfully.");
+            await SeedData(db);
+            logger.LogInformation("Seed data applied successfully.");
+            break;
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Migration attempt {Attempt} failed: {Message}", attempt, ex.Message);
+            if (attempt == maxRetries)
+            {
+                logger.LogCritical("All migration attempts failed. Starting app anyway — some features may not work.");
+                break;
+            }
+            var delay = attempt * 5;
+            logger.LogInformation("Retrying in {Delay} seconds...", delay);
+            await Task.Delay(TimeSpan.FromSeconds(delay));
+        }
+    }
 }
 
 app.Run();
