@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using PersonalWebsiteAPI.Data;
 using PersonalWebsiteAPI.Models;
+using PersonalWebsiteAPI.Services;
 
 namespace PersonalWebsiteAPI.Controllers;
 
@@ -66,8 +67,8 @@ public class LandingController : ControllerBase
 public class AdminController : ControllerBase
 {
     private readonly AppDbContext _db;
-    private readonly IWebHostEnvironment _env;
-    public AdminController(AppDbContext db, IWebHostEnvironment env) { _db = db; _env = env; }
+    private readonly CloudinaryService _cloudinary;
+    public AdminController(AppDbContext db, CloudinaryService cloudinary) { _db = db; _cloudinary = cloudinary; }
 
     // ── Landing Content ──
     [HttpGet("content")]
@@ -225,16 +226,16 @@ public class AdminController : ControllerBase
         await _db.SaveChangesAsync(); return Ok(new { saved = updates.Count });
     }
 
-    // ── Upload ──
+    // ── Upload (admin assets like logo, banner) ──
     [HttpPost("upload")]
     public async Task<IActionResult> Upload(IFormFile file)
     {
-        var uploads = Path.Combine(_env.WebRootPath ?? "wwwroot", "uploads", "admin");
-        Directory.CreateDirectory(uploads);
-        var fileName = $"{Guid.NewGuid()}{Path.GetExtension(file.FileName)}";
-        using var stream = new FileStream(Path.Combine(uploads, fileName), FileMode.Create);
-        await file.CopyToAsync(stream);
-        return Ok(new { url = $"/uploads/admin/{fileName}" });
+        try
+        {
+            var url = await _cloudinary.UploadImageAsync(file, "admin");
+            return Ok(new { url });
+        }
+        catch (ArgumentException ex) { return BadRequest(new { message = ex.Message }); }
     }
 }
 

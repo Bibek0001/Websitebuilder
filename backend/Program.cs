@@ -61,6 +61,7 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 
 builder.Services.AddAuthorization();
 builder.Services.AddScoped<JwtService>();
+builder.Services.AddScoped<CloudinaryService>();
 builder.Services.AddControllers();
 
 // ─── Rate Limiting ────────────────────────────────────────────────────────────

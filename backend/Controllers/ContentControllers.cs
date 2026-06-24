@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using PersonalWebsiteAPI.Data;
 using PersonalWebsiteAPI.Models;
+using PersonalWebsiteAPI.Services;
 using System.Security.Claims;
 
 namespace PersonalWebsiteAPI.Controllers;
@@ -265,8 +266,8 @@ public class BlogController : ControllerBase
 public class GalleryController : ControllerBase
 {
     private readonly AppDbContext _db;
-    private readonly IWebHostEnvironment _env;
-    public GalleryController(AppDbContext db, IWebHostEnvironment env) { _db = db; _env = env; }
+    private readonly CloudinaryService _cloudinary;
+    public GalleryController(AppDbContext db, CloudinaryService cloudinary) { _db = db; _cloudinary = cloudinary; }
 
     [HttpGet("{userId:int}")]
     public async Task<IActionResult> Get(int userId) =>
@@ -280,58 +281,39 @@ public class GalleryController : ControllerBase
         return Ok(await _db.GalleryItems.Where(g => g.UserId == uid).OrderByDescending(g => g.CreatedAt).ToListAsync());
     }
 
-    private static readonly HashSet<string> AllowedImageExts =
-        new(StringComparer.OrdinalIgnoreCase) { ".jpg", ".jpeg", ".png", ".webp", ".gif" };
-    private const long MaxImageSize = 5 * 1024 * 1024; // 5 MB
-
     [Authorize]
     [HttpPost]
     public async Task<IActionResult> Upload([FromForm] IFormFile file, [FromForm] string? caption, [FromForm] string? category)
     {
-        if (file == null || file.Length == 0)
-            return BadRequest(new { message = "No file provided." });
-        if (file.Length > MaxImageSize)
-            return BadRequest(new { message = "Image must be under 5 MB." });
-        var ext = Path.GetExtension(file.FileName);
-        if (!AllowedImageExts.Contains(ext))
-            return BadRequest(new { message = "Only JPG, PNG, WEBP, GIF images are allowed." });
-
-        var uid = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
-        var uploads = Path.Combine(_env.WebRootPath ?? "wwwroot", "uploads", "gallery");
-        Directory.CreateDirectory(uploads);
-        var fileName = $"{Guid.NewGuid()}{ext.ToLowerInvariant()}";
-        using (var stream = new FileStream(Path.Combine(uploads, fileName), FileMode.Create))
-            await file.CopyToAsync(stream);
-
-        var item = new GalleryItem
+        try
         {
-            UserId = uid,
-            ImageUrl = $"/uploads/gallery/{fileName}",
-            Caption = caption,
-            Category = category ?? "Office",
-            CreatedAt = DateTime.UtcNow
-        };
-        _db.GalleryItems.Add(item);
-        await _db.SaveChangesAsync();
-        return Ok(item);
+            var uid = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+            var url = await _cloudinary.UploadImageAsync(file, "gallery");
+
+            var item = new GalleryItem
+            {
+                UserId    = uid,
+                ImageUrl  = url,
+                Caption   = caption,
+                Category  = category ?? "Office",
+                CreatedAt = DateTime.UtcNow
+            };
+            _db.GalleryItems.Add(item);
+            await _db.SaveChangesAsync();
+            return Ok(item);
+        }
+        catch (ArgumentException ex) { return BadRequest(new { message = ex.Message }); }
     }
 
     [Authorize]
     [HttpDelete("{id}")]
     public async Task<IActionResult> Delete(int id)
     {
-        var uid = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+        var uid  = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
         var item = await _db.GalleryItems.FirstOrDefaultAsync(g => g.Id == id && g.UserId == uid);
         if (item == null) return NotFound();
 
-        // Delete physical file
-        try
-        {
-            var fullPath = Path.Combine(_env.WebRootPath ?? "wwwroot", item.ImageUrl.TrimStart('/'));
-            if (System.IO.File.Exists(fullPath)) System.IO.File.Delete(fullPath);
-        }
-        catch { /* best-effort cleanup */ }
-
+        await _cloudinary.DeleteAsync(item.ImageUrl);
         _db.GalleryItems.Remove(item);
         await _db.SaveChangesAsync();
         return NoContent();
