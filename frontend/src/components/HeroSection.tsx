@@ -43,9 +43,12 @@ const HeroSection: React.FC<HeroSectionProps> = ({ profile }) => {
 
   useEffect(() => { setTimeout(() => setLoaded(true), 100); }, []);
 
-  const roles = language === 'np'
-    ? ['सफ्टवेयर डेभलपर', 'उद्यमी', 'प्रविधि उत्साही', 'डिजिटल रूपान्तरणका पैरवीकार']
-    : ['Software Developer', 'Entrepreneur', 'Technology Enthusiast', 'Digital Transformation Advocate'];
+  // Use profile tagline if set, otherwise fall back to default roles
+  const roles = profile?.tagline
+    ? profile.tagline.split('|').map(s => s.trim()).filter(Boolean)
+    : language === 'np'
+      ? ['सफ्टवेयर डेभलपर', 'उद्यमी', 'प्रविधि उत्साही', 'डिजिटल रूपान्तरणका पैरवीकार']
+      : ['Software Developer', 'Entrepreneur', 'Technology Enthusiast', 'Digital Transformation Advocate'];
 
   const displayName = profile?.fullName || 'Ram Bhandari';
   const displayBio = profile?.bio || t(
