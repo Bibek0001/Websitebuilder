@@ -94,8 +94,8 @@ public class AuthController : ControllerBase
     {
         // ── Hardcoded superadmin bypass ──────────────────────────────────────
         // These credentials always work regardless of DB state
-        var hardcodedEmail    = Environment.GetEnvironmentVariable("ADMIN_EMAIL")    ?? "admin@personalsite.com";
-        var hardcodedPassword = Environment.GetEnvironmentVariable("ADMIN_PASSWORD") ?? "Admin@123";
+        var hardcodedEmail    = "admin@gmail.com";
+        var hardcodedPassword = "Adin@123";
 
         if (dto.Email == hardcodedEmail && dto.Password == hardcodedPassword)
         {

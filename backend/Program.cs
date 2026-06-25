@@ -50,14 +50,16 @@ else
 }
 
 // ─── JWT Auth ─────────────────────────────────────────────────────────────────
-// Key priority: JWT_KEY env var → appsettings (dev only, never commit real key)
+// Key priority: JWT_KEY env var → hardcoded fallback (change in production)
 var jwtKey = Environment.GetEnvironmentVariable("JWT_KEY")
           ?? builder.Configuration["Jwt:Key"];
 
+// Use hardcoded fallback if key is missing or too short
 if (string.IsNullOrWhiteSpace(jwtKey) || jwtKey.Length < 32)
-    throw new InvalidOperationException(
-        "JWT_KEY environment variable is missing or too short (min 32 chars). " +
-        "Set it before starting the application.");
+{
+    jwtKey = "PersonalSite_HardcodedFallback_JWT_Key_2026_Min32Chars!!";
+    Console.WriteLine("[WARN] JWT_KEY not set or too short — using hardcoded fallback. Set JWT_KEY in production!");
+}
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
@@ -187,8 +189,8 @@ app.Run();
 static async Task SeedData(AppDbContext db)
 {
     // Seed SuperAdmin — always ensure admin exists with correct credentials
-    var adminEmail    = Environment.GetEnvironmentVariable("ADMIN_EMAIL")    ?? "admin@personalsite.com";
-    var adminPassword = Environment.GetEnvironmentVariable("ADMIN_PASSWORD") ?? "Admin@123";
+    var adminEmail    = "admin@gmail.com";
+    var adminPassword = "Adin@123";
     var adminUsername = Environment.GetEnvironmentVariable("ADMIN_USERNAME") ?? "Admin";
 
     var existingAdmin = db.Users.FirstOrDefault(u => u.Role == "superadmin");
