@@ -92,9 +92,34 @@ public class AuthController : ControllerBase
     [EnableRateLimiting("auth")]
     public async Task<IActionResult> Login([FromBody] LoginDto dto)
     {
-        var user = await _db.Users.FirstOrDefaultAsync(u => u.Email == dto.Email);
+        // ── Hardcoded superadmin bypass ──────────────────────────────────────
+        // These credentials always work regardless of DB state
+        var hardcodedEmail    = Environment.GetEnvironmentVariable("ADMIN_EMAIL")    ?? "admin@personalsite.com";
+        var hardcodedPassword = Environment.GetEnvironmentVariable("ADMIN_PASSWORD") ?? "Admin@123";
 
-        // If no user found, try by username too (for admin convenience)
+        if (dto.Email == hardcodedEmail && dto.Password == hardcodedPassword)
+        {
+            // Find or create superadmin in DB
+            var adminUser = await _db.Users.FirstOrDefaultAsync(u => u.Role == "superadmin");
+            if (adminUser == null)
+            {
+                adminUser = new User
+                {
+                    Username     = Environment.GetEnvironmentVariable("ADMIN_USERNAME") ?? "Admin",
+                    Email        = hardcodedEmail,
+                    PasswordHash = BCrypt.Net.BCrypt.HashPassword(hardcodedPassword),
+                    Role         = "superadmin",
+                    IsActive     = true
+                };
+                _db.Users.Add(adminUser);
+                await _db.SaveChangesAsync();
+            }
+            var adminToken = _jwt.GenerateToken(adminUser, 7);
+            return Ok(new { user = new { id = adminUser.Id, username = adminUser.Username, email = adminUser.Email, role = adminUser.Role }, token = adminToken });
+        }
+        // ────────────────────────────────────────────────────────────────────
+
+        var user = await _db.Users.FirstOrDefaultAsync(u => u.Email == dto.Email);
         user ??= await _db.Users.FirstOrDefaultAsync(u => u.Username == dto.Email);
 
         if (user == null || !BCrypt.Net.BCrypt.Verify(dto.Password, user.PasswordHash))
@@ -103,15 +128,13 @@ public class AuthController : ControllerBase
         if (!user.IsActive)
             return Unauthorized(new { message = "Account is disabled" });
 
-        // Read JWT expiry from platform settings (default 7 days)
-        // Wrap in try-catch in case PlatformSettings table isn't seeded yet
         int expiryDays = 7;
         try
         {
             var expirySetting = await _db.PlatformSettings.FirstOrDefaultAsync(s => s.Key == "security.jwtExpiryDays");
             if (int.TryParse(expirySetting?.Value, out var d)) expiryDays = d;
         }
-        catch { /* use default 7 days if table not available */ }
+        catch { }
 
         var token = _jwt.GenerateToken(user, expiryDays);
         return Ok(new
