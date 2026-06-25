@@ -76,7 +76,7 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 
 builder.Services.AddAuthorization();
 builder.Services.AddScoped<JwtService>();
-builder.Services.AddScoped<CloudinaryService>();
+builder.Services.AddScoped<SupabaseStorageService>(); // Supabase Storage (replaces Cloudinary)
 builder.Services.AddControllers();
 
 // ─── Rate Limiting ────────────────────────────────────────────────────────────

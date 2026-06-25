@@ -67,8 +67,8 @@ public class LandingController : ControllerBase
 public class AdminController : ControllerBase
 {
     private readonly AppDbContext _db;
-    private readonly CloudinaryService _cloudinary;
-    public AdminController(AppDbContext db, CloudinaryService cloudinary) { _db = db; _cloudinary = cloudinary; }
+    private readonly SupabaseStorageService _storage;
+    public AdminController(AppDbContext db, SupabaseStorageService storage) { _db = db; _storage = storage; }
 
     // ── Landing Content ──
     [HttpGet("content")]
@@ -232,7 +232,7 @@ public class AdminController : ControllerBase
     {
         try
         {
-            var url = await _cloudinary.UploadImageAsync(file, "admin");
+            var url = await _storage.UploadImageAsync(file, "admin");
             return Ok(new { url });
         }
         catch (ArgumentException ex) { return BadRequest(new { message = ex.Message }); }

@@ -5,7 +5,6 @@ using PersonalWebsiteAPI.Data;
 using PersonalWebsiteAPI.Models;
 using PersonalWebsiteAPI.Services;
 using System.Security.Claims;
-
 namespace PersonalWebsiteAPI.Controllers;
 
 // ─── Projects ────────────────────────────────────────────────────────────────
@@ -266,8 +265,8 @@ public class BlogController : ControllerBase
 public class GalleryController : ControllerBase
 {
     private readonly AppDbContext _db;
-    private readonly CloudinaryService _cloudinary;
-    public GalleryController(AppDbContext db, CloudinaryService cloudinary) { _db = db; _cloudinary = cloudinary; }
+    private readonly SupabaseStorageService _storage;
+    public GalleryController(AppDbContext db, SupabaseStorageService storage) { _db = db; _storage = storage; }
 
     [HttpGet("{userId:int}")]
     public async Task<IActionResult> Get(int userId) =>
@@ -288,7 +287,7 @@ public class GalleryController : ControllerBase
         try
         {
             var uid = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
-            var url = await _cloudinary.UploadImageAsync(file, "gallery");
+            var url = await _storage.UploadImageAsync(file, "gallery");
 
             var item = new GalleryItem
             {
@@ -313,7 +312,7 @@ public class GalleryController : ControllerBase
         var item = await _db.GalleryItems.FirstOrDefaultAsync(g => g.Id == id && g.UserId == uid);
         if (item == null) return NotFound();
 
-        await _cloudinary.DeleteAsync(item.ImageUrl);
+        await _storage.DeleteAsync(item.ImageUrl);
         _db.GalleryItems.Remove(item);
         await _db.SaveChangesAsync();
         return NoContent();

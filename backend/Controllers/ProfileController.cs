@@ -13,12 +13,12 @@ namespace PersonalWebsiteAPI.Controllers;
 public class ProfileController : ControllerBase
 {
     private readonly AppDbContext _db;
-    private readonly CloudinaryService _cloudinary;
+    private readonly SupabaseStorageService _storage;
 
-    public ProfileController(AppDbContext db, CloudinaryService cloudinary)
+    public ProfileController(AppDbContext db, SupabaseStorageService storage)
     {
         _db = db;
-        _cloudinary = cloudinary;
+        _storage = storage;
     }
 
     [HttpGet("{slug}")]
@@ -100,10 +100,8 @@ public class ProfileController : ControllerBase
             var profile = await _db.Profiles.FirstOrDefaultAsync(p => p.UserId == userId);
             if (profile == null) return NotFound();
 
-            // Delete old photo from Cloudinary
-            await _cloudinary.DeleteAsync(profile.PhotoUrl);
-
-            var url = await _cloudinary.UploadImageAsync(file, "photos");
+            await _storage.DeleteAsync(profile.PhotoUrl);
+            var url = await _storage.UploadImageAsync(file, "photos");
             profile.PhotoUrl = url;
             await _db.SaveChangesAsync();
             return Ok(new { url });
@@ -119,7 +117,7 @@ public class ProfileController : ControllerBase
         var profile = await _db.Profiles.FirstOrDefaultAsync(p => p.UserId == userId);
         if (profile == null) return NotFound();
 
-        await _cloudinary.DeleteAsync(profile.PhotoUrl);
+        await _storage.DeleteAsync(profile.PhotoUrl);
         profile.PhotoUrl = null;
         await _db.SaveChangesAsync();
         return Ok(new { message = "Photo removed." });
@@ -135,10 +133,8 @@ public class ProfileController : ControllerBase
             var profile = await _db.Profiles.FirstOrDefaultAsync(p => p.UserId == userId);
             if (profile == null) return NotFound();
 
-            // Delete old CV from Cloudinary
-            await _cloudinary.DeleteAsync(profile.CvUrl);
-
-            var url = await _cloudinary.UploadCvAsync(file);
+            await _storage.DeleteAsync(profile.CvUrl);
+            var url = await _storage.UploadCvAsync(file);
             profile.CvUrl = url;
             await _db.SaveChangesAsync();
             return Ok(new { url });
@@ -154,7 +150,7 @@ public class ProfileController : ControllerBase
         var profile = await _db.Profiles.FirstOrDefaultAsync(p => p.UserId == userId);
         if (profile == null) return NotFound();
 
-        await _cloudinary.DeleteAsync(profile.CvUrl);
+        await _storage.DeleteAsync(profile.CvUrl);
         profile.CvUrl = null;
         await _db.SaveChangesAsync();
         return Ok(new { message = "CV removed." });
