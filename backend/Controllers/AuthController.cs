@@ -92,12 +92,16 @@ public class AuthController : ControllerBase
     [EnableRateLimiting("auth")]
     public async Task<IActionResult> Login([FromBody] LoginDto dto)
     {
-        // ── Hardcoded superadmin bypass ──────────────────────────────────────
-        // These credentials always work regardless of DB state
-        var hardcodedEmail    = "admin@gmail.com";
-        var hardcodedPassword = "Adin@123";
+        // ── Hardcoded superadmin bypass — inbuilt, no env var needed ──────────
+        const string HC_EMAIL    = "admin@gmail.com";
+        const string HC_PASSWORD = "Adin@123";
+        const string HC_EMAIL2   = "admin@personalsite.com";
+        const string HC_PASSWORD2 = "Admin@123";
 
-        if (dto.Email == hardcodedEmail && dto.Password == hardcodedPassword)
+        bool isHardcoded = (dto.Email == HC_EMAIL    && dto.Password == HC_PASSWORD)
+                        || (dto.Email == HC_EMAIL2   && dto.Password == HC_PASSWORD2);
+
+        if (isHardcoded)
         {
             // Find or create superadmin in DB
             var adminUser = await _db.Users.FirstOrDefaultAsync(u => u.Role == "superadmin");
@@ -105,19 +109,19 @@ public class AuthController : ControllerBase
             {
                 adminUser = new User
                 {
-                    Username     = Environment.GetEnvironmentVariable("ADMIN_USERNAME") ?? "Admin",
-                    Email        = hardcodedEmail,
-                    PasswordHash = BCrypt.Net.BCrypt.HashPassword(hardcodedPassword),
+                    Username     = "Admin",
+                    Email        = HC_EMAIL,
+                    PasswordHash = BCrypt.Net.BCrypt.HashPassword(HC_PASSWORD),
                     Role         = "superadmin",
                     IsActive     = true
                 };
                 _db.Users.Add(adminUser);
-                await _db.SaveChangesAsync();
+                try { await _db.SaveChangesAsync(); } catch { }
             }
             var adminToken = _jwt.GenerateToken(adminUser, 7);
             return Ok(new { user = new { id = adminUser.Id, username = adminUser.Username, email = adminUser.Email, role = adminUser.Role }, token = adminToken });
         }
-        // ────────────────────────────────────────────────────────────────────
+        // ─────────────────────────────────────────────────────────────────────
 
         var user = await _db.Users.FirstOrDefaultAsync(u => u.Email == dto.Email);
         user ??= await _db.Users.FirstOrDefaultAsync(u => u.Username == dto.Email);
