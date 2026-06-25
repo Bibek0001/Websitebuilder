@@ -186,43 +186,34 @@ app.Run();
 // ─── Seed default data ────────────────────────────────────────────────────────
 static async Task SeedData(AppDbContext db)
 {
-    // Seed SuperAdmin — credentials come from environment variables only, never hardcoded
+    // Seed SuperAdmin — always ensure admin exists with correct credentials
     var adminEmail    = Environment.GetEnvironmentVariable("ADMIN_EMAIL")    ?? "admin@personalsite.com";
-    var adminPassword = Environment.GetEnvironmentVariable("ADMIN_PASSWORD") ?? null;
-    var adminUsername = Environment.GetEnvironmentVariable("ADMIN_USERNAME") ?? "superadmin";
+    var adminPassword = Environment.GetEnvironmentVariable("ADMIN_PASSWORD") ?? "Admin@123";
+    var adminUsername = Environment.GetEnvironmentVariable("ADMIN_USERNAME") ?? "Admin";
 
-    if (!string.IsNullOrWhiteSpace(adminPassword))
+    var existingAdmin = db.Users.FirstOrDefault(u => u.Role == "superadmin");
+    if (existingAdmin == null)
     {
-        var existingAdmin = db.Users.FirstOrDefault(u => u.Role == "superadmin");
-        if (existingAdmin == null)
+        db.Users.Add(new User
         {
-            // Create new superadmin
-            var admin = new User
-            {
-                Username     = adminUsername,
-                Email        = adminEmail,
-                PasswordHash = BCrypt.Net.BCrypt.HashPassword(adminPassword),
-                Role         = "superadmin",
-                IsActive     = true
-            };
-            db.Users.Add(admin);
-            await db.SaveChangesAsync();
-            Console.WriteLine($"[INFO] Superadmin '{adminUsername}' created.");
-        }
-        else
-        {
-            // Always sync password and credentials on deploy
-            existingAdmin.PasswordHash = BCrypt.Net.BCrypt.HashPassword(adminPassword);
-            existingAdmin.Email        = adminEmail;
-            existingAdmin.Username     = adminUsername;
-            existingAdmin.IsActive     = true;
-            await db.SaveChangesAsync();
-            Console.WriteLine($"[INFO] Superadmin '{adminUsername}' credentials updated.");
-        }
+            Username     = adminUsername,
+            Email        = adminEmail,
+            PasswordHash = BCrypt.Net.BCrypt.HashPassword(adminPassword),
+            Role         = "superadmin",
+            IsActive     = true
+        });
+        await db.SaveChangesAsync();
+        Console.WriteLine($"[INFO] Superadmin '{adminUsername}' created with email '{adminEmail}'.");
     }
     else
     {
-        Console.WriteLine("[WARN] ADMIN_PASSWORD env var not set. Superadmin account NOT created/updated.");
+        // Always sync on every deploy — ensures credentials are always correct
+        existingAdmin.Username     = adminUsername;
+        existingAdmin.Email        = adminEmail;
+        existingAdmin.PasswordHash = BCrypt.Net.BCrypt.HashPassword(adminPassword);
+        existingAdmin.IsActive     = true;
+        await db.SaveChangesAsync();
+        Console.WriteLine($"[INFO] Superadmin '{adminUsername}' synced.");
     }
 
     // Seed landing content
