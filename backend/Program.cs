@@ -115,6 +115,24 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 
+// ─── Global exception handler — return JSON error in production ───────────────
+app.UseExceptionHandler(errorApp =>
+{
+    errorApp.Run(async context =>
+    {
+        context.Response.StatusCode = 500;
+        context.Response.ContentType = "application/json";
+        var error = context.Features.Get<Microsoft.AspNetCore.Diagnostics.IExceptionHandlerFeature>();
+        if (error != null)
+        {
+            var msg = app.Environment.IsDevelopment()
+                ? error.Error.ToString()
+                : error.Error.Message;
+            await context.Response.WriteAsync($"{{\"error\":\"{msg.Replace("\"", "'")}\"}}");
+        }
+    });
+});
+
 // ─── HTTPS enforcement in production ─────────────────────────────────────────
 if (!app.Environment.IsDevelopment())
 {
