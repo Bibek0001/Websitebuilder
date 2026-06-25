@@ -103,8 +103,9 @@ var allowedOrigins = new List<string>
 {
     "http://localhost:3000",
     "http://localhost:3001",
+    "https://websitebuilder0.netlify.app", // hardcoded as fallback
 };
-if (!string.IsNullOrWhiteSpace(frontendUrl))
+if (!string.IsNullOrWhiteSpace(frontendUrl) && !allowedOrigins.Contains(frontendUrl))
     allowedOrigins.Add(frontendUrl);
 
 builder.Services.AddCors(options =>
