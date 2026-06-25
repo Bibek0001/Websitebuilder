@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Search, Calendar, Tag, ArrowRight, Clock } from 'lucide-react';
-import { Link, useParams } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { useLanguage } from '../context/LanguageContext';
 import { BlogPost } from '../types';
 import SectionWrapper from './SectionWrapper';
