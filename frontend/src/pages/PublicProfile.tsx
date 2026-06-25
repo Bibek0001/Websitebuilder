@@ -137,8 +137,19 @@ const PublicProfile: React.FC = () => {
   if (loading) return <LoadingState />;
   if (notFound) return <NotFoundState slug={slug || 'unknown'} />;
 
+  // Map selectedTemplate to a CSS theme class applied to the root wrapper
+  const templateClass = (() => {
+    const t = profile?.selectedTemplate?.toLowerCase() || 'default';
+    if (t.includes('dark') || t.includes('creative'))  return 'theme-dark';
+    if (t.includes('minimal') || t.includes('white'))  return 'theme-minimal';
+    if (t.includes('corporate') || t.includes('green')) return 'theme-corporate';
+    if (t.includes('purple') || t.includes('tech'))    return 'theme-purple';
+    if (t.includes('warm') || t.includes('personal'))  return 'theme-warm';
+    return 'theme-default';
+  })();
+
   return (
-    <div className="min-h-screen bg-white dark:bg-gray-950 text-gray-900 dark:text-white">
+    <div className={`min-h-screen bg-white dark:bg-gray-950 text-gray-900 dark:text-white ${templateClass}`}>
       <Navbar profile={profile} />
       <HeroSection profile={profile} />
       <AboutSection profile={profile} />

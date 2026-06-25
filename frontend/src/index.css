@@ -141,3 +141,37 @@ input[type="password"]::-webkit-credentials-auto-fill-button {
   from { width: 0%; }
   to   { width: 100%; }
 }
+
+/* ── Template Themes ─────────────────────────────────────────────────────── */
+
+/* Default — clean white/blue (no change) */
+.theme-default { }
+
+/* Creative Dark — dark backgrounds, bold accents */
+.theme-dark {
+  --tw-bg-opacity: 1;
+  background-color: #0f172a;
+  color: #f1f5f9;
+}
+.theme-dark .section-padding { background-color: #0f172a; }
+.theme-dark .card { background-color: #1e293b; border-color: #334155; }
+.theme-dark body { background-color: #0f172a; }
+
+/* Minimal White — extra whitespace, serif headings */
+.theme-minimal .section-title { font-family: 'Playfair Display', serif; }
+.theme-minimal .section-padding { padding-top: 6rem; padding-bottom: 6rem; }
+.theme-minimal .card { border-radius: 0.5rem; box-shadow: none; border-color: #e5e7eb; }
+
+/* Corporate Green — green tints */
+.theme-corporate { --primary: #16a34a; }
+.theme-corporate .section-padding:nth-child(even) { background-color: #f0fdf4; }
+
+/* Tech Purple — purple gradient backgrounds */
+.theme-purple .section-padding:nth-child(odd) { background: linear-gradient(135deg, #faf5ff 0%, #ede9fe 100%); }
+.theme-purple .section-title { background: linear-gradient(135deg, #7c3aed, #4f46e5); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+
+/* Warm Personal — warm beige tones */
+.theme-warm .section-padding { background-color: #fffbf5; }
+.theme-warm .section-padding:nth-child(even) { background-color: #fef3c7; }
+.theme-warm .section-title { font-family: 'Playfair Display', serif; color: #92400e; }
+.theme-warm.dark .section-padding { background-color: #1c1008; }
