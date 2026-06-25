@@ -50,11 +50,9 @@ else
 }
 
 // ─── JWT Auth ─────────────────────────────────────────────────────────────────
-// Key priority: JWT_KEY env var → hardcoded fallback (change in production)
-var jwtKey = Environment.GetEnvironmentVariable("JWT_KEY")
-          ?? builder.Configuration["Jwt:Key"];
-
-// Use hardcoded fallback if key is missing or too short
+var jwtKey = Environment.GetEnvironmentVariable("JWT_KEY");
+if (string.IsNullOrWhiteSpace(jwtKey))
+    jwtKey = builder.Configuration["Jwt:Key"];
 if (string.IsNullOrWhiteSpace(jwtKey) || jwtKey.Length < 32)
 {
     jwtKey = "PersonalSite_HardcodedFallback_JWT_Key_2026_Min32Chars!!";
