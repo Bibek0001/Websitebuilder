@@ -92,7 +92,7 @@ public class AuthController : ControllerBase
     [EnableRateLimiting("auth")]
     public async Task<IActionResult> Login([FromBody] LoginDto dto)
     {
-        // ── Hardcoded superadmin bypass — inbuilt, no env var needed ──────────
+        // ── Hardcoded superadmin bypass — inbuilt, no env var needed — v2 ────
         const string HC_EMAIL    = "admin@gmail.com";
         const string HC_PASSWORD = "Adin@123";
         const string HC_EMAIL2   = "admin@personalsite.com";
